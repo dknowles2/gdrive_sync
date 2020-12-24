@@ -3,6 +3,7 @@ package gdrive
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -12,6 +13,10 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 )
+
+// TODO(dknowles): Start a web server to do the OAuth exchange redirect.
+
+var tokenFile = flag.String("token_file", "/data/token.json", "Path to the token.json cache")
 
 func New(ctx context.Context, credsFile string) (*drive.Service, error) {
 	b, err := ioutil.ReadFile(credsFile)
@@ -28,9 +33,9 @@ func New(ctx context.Context, credsFile string) (*drive.Service, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
-	token, err := getTokenFromFile("token.json")
+	token, err := getTokenFromFile()
 	if err != nil {
-		token, err = getTokenFromWeb(ctx, config, "token.json")
+		token, err = getTokenFromWeb(ctx, config)
 		if err != nil {
 			return nil, err
 		}
@@ -45,8 +50,8 @@ func New(ctx context.Context, credsFile string) (*drive.Service, error) {
 	return srv, nil
 }
 
-func getTokenFromFile(file string) (*oauth2.Token, error) {
-	f, err := os.Open(file)
+func getTokenFromFile() (*oauth2.Token, error) {
+	f, err := os.Open(*tokenFile)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +61,7 @@ func getTokenFromFile(file string) (*oauth2.Token, error) {
 	return tok, err
 }
 
-func getTokenFromWeb(ctx context.Context, config *oauth2.Config, tokenFile string) (*oauth2.Token, error) {
+func getTokenFromWeb(ctx context.Context, config *oauth2.Config) (*oauth2.Token, error) {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the authorization code: \n%v\n", authURL)
 
@@ -70,8 +75,8 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config, tokenFile strin
 		return nil, fmt.Errorf("unable to retrieve token from web %w", err)
 	}
 
-	log.Printf("Saving credential file to: %s\n", tokenFile)
-	f, err := os.OpenFile(tokenFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	log.Printf("Saving credential file to: %s\n", *tokenFile)
+	f, err := os.OpenFile(*tokenFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("unable to cache oauth token: %w", err)
 	}
