@@ -23,12 +23,15 @@ var ignoreFiles = map[string]bool{
 	".DS_Store": true,
 }
 
+type waiter func(context.Context, string) error
+
 type Uploader struct {
 	watcher    *fsnotify.Watcher
 	drive      *drive.Service
 	inputDir   string
 	outputDir  string
 	folderId   string
+	wait       waiter
 	mu         sync.Mutex
 	inProgress map[string]bool
 }
@@ -51,6 +54,7 @@ func New(in, out string, d *drive.Service) (*Uploader, error) {
 		inputDir:   in,
 		outputDir:  out,
 		folderId:   folderId,
+		wait:       waitForFileSizeToStabilize,
 		inProgress: make(map[string]bool),
 	}
 	return u, nil
@@ -130,10 +134,6 @@ func (u *Uploader) watch(ctx context.Context) error {
 func shouldIgnore(f string) bool {
 	baseFile := filepath.Base(f)
 	return ignoreFiles[baseFile] || strings.HasPrefix(baseFile, ".")
-}
-
-func waitForFileWrite(ctx context.Context, f string) error {
-	return waitForFileSizeToStabilize(ctx, f)
 }
 
 func sleep(ctx context.Context, t time.Duration) error {
@@ -230,7 +230,7 @@ func (u *Uploader) upload(ctx context.Context, f string) {
 		u.mu.Unlock()
 	}()
 
-	if err := waitForFileWrite(ctx, f); err != nil {
+	if err := u.wait(ctx, f); err != nil {
 		log.Printf("failed waiting for file %s: %s", f, err)
 		return
 	}
